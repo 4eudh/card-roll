@@ -2446,115 +2446,167 @@
         }
 
         // Database Functions
-        async function saveGameData() {
-            if (!app.user) return;
+        // Replace the saveGameData function with this fixed version:
+async function saveGameData() {
+    if (!app.user) return;
+    
+    // Clear any existing timeout
+    if (app.saveTimeout) {
+        clearTimeout(app.saveTimeout);
+    }
+    
+    // Debounce saves to avoid too many database calls
+    app.saveTimeout = setTimeout(async () => {
+        try {
+            setSyncStatus('syncing');
             
-            // Clear any existing timeout
-            if (app.saveTimeout) {
-                clearTimeout(app.saveTimeout);
-            }
+            const gameData = {
+                user_id: app.user.id,
+                currency: game.currency || 1000,
+                inventory: game.inventory || [],
+                inventory_limit: game.inventoryLimit || 6,
+                level: game.level || 1,
+                experience: game.experience || 0,
+                experience_to_next: game.experienceToNext || 100,
+                collection: game.collection || {
+                    totalRolls: 0,
+                    cardsSold: 0,
+                    cardsCrafted: 0,
+                    commonCount: 0,
+                    uncommonCount: 0,
+                    rareCount: 0,
+                    epicCount: 0,
+                    legendaryCount: 0,
+                    limitedCount: 0
+                },
+                power_ups: game.powerUps || {
+                    luckyCharm: 0,
+                    doubleCurrency: 0,
+                    rareBoost: 0
+                },
+                rarity_chances: game.rarityChances || {
+                    common: 100,
+                    uncommon: 60,
+                    rare: 30,
+                    epic: 9,
+                    legendary: 1
+                },
+                updated_at: new Date().toISOString()
+            };
             
-            // Debounce saves to avoid too many database calls
-            app.saveTimeout = setTimeout(async () => {
-                try {
-                    setSyncStatus('syncing');
-                    
-                    const gameData = {
-                        user_id: app.user.id,
-                        currency: game.currency,
-                        inventory: game.inventory,
-                        inventory_limit: game.inventoryLimit,
-                        level: game.level,
-                        experience: game.experience,
-                        experience_to_next: game.experienceToNext,
-                        collection: game.collection,
-                        power_ups: game.powerUps,
-                        rarity_chances: game.rarityChances,
-                        updated_at: new Date().toISOString()
-                    };
-                    
-                    const { error } = await supabase
-                        .from('player_data')
-                        .upsert(gameData);
-                    
-                    if (error) {
-                        console.error('Save error:', error);
-                        setSyncStatus('error');
-                    } else {
-                        setSyncStatus('synced');
-                    }
-                } catch (error) {
-                    console.error('Save error:', error);
-                    setSyncStatus('error');
-                }
-            }, 1000); // Wait 1 second before saving
-        }
-        
-        async function loadGameData() {
-            if (!app.user) return;
+            const { error } = await supabase
+                .from('player_data')
+                .upsert(gameData, {
+                    onConflict: 'user_id'
+                });
             
-            try {
-                setSyncStatus('syncing');
-                
-                const { data, error } = await supabase
-                    .from('player_data')
-                    .select('*')
-                    .eq('user_id', app.user.id)
-                    .single();
-                
-                if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
-                    console.error('Load error:', error);
-                    setSyncStatus('error');
-                    return false;
-                }
-                
-                if (data) {
-                    game.currency = data.currency || 1000;
-                    game.inventory = data.inventory || [];
-                    game.inventoryLimit = data.inventory_limit || 6;
-                    game.level = data.level || 1;
-                    game.experience = data.experience || 0;
-                    game.experienceToNext = data.experience_to_next || 100;
-                    game.collection = data.collection || {
-                        totalRolls: 0,
-                        cardsSold: 0,
-                        cardsCrafted: 0,
-                        commonCount: 0,
-                        uncommonCount: 0,
-                        rareCount: 0,
-                        epicCount: 0,
-                        legendaryCount: 0,
-                        limitedCount: 0
-                    };
-                    game.powerUps = data.power_ups || {
-                        luckyCharm: 0,
-                        doubleCurrency: 0,
-                        rareBoost: 0
-                    };
-                    game.rarityChances = data.rarity_chances || {
-                        common: 100,
-                        uncommon: 60,
-                        rare: 30,
-                        epic: 9,
-                        legendary: 1
-                    };
-                    
-                    updateAllDisplays();
-                    setSyncStatus('synced');
-                    return true;
-                } else {
-                    // New user, set defaults and save
-                    await saveGameData();
-                    setSyncStatus('synced');
-                    return false;
-                }
-            } catch (error) {
-                console.error('Load error:', error);
+            if (error) {
+                console.error('Save error:', error);
                 setSyncStatus('error');
-                return false;
+            } else {
+                setSyncStatus('synced');
             }
+        } catch (error) {
+            console.error('Save error:', error);
+            setSyncStatus('error');
+        }
+    }, 1000);
+}        
+        async function loadGameData() {
+    if (!app.user) return;
+    
+    try {
+        setSyncStatus('syncing');
+        
+        const { data, error } = await supabase
+            .from('player_data')
+            .select('*')
+            .eq('user_id', app.user.id)
+            .single();
+        
+        if (error && error.code !== 'PGRST116') {
+            console.error('Load error:', error);
+            setSyncStatus('error');
+            return false;
         }
         
+        if (data) {
+            // Load existing data
+            game.currency = data.currency || 1000;
+            game.inventory = data.inventory || [];
+            game.inventoryLimit = data.inventory_limit || 6;
+            game.level = data.level || 1;
+            game.experience = data.experience || 0;
+            game.experienceToNext = data.experience_to_next || 100;
+            game.collection = data.collection || {
+                totalRolls: 0,
+                cardsSold: 0,
+                cardsCrafted: 0,
+                commonCount: 0,
+                uncommonCount: 0,
+                rareCount: 0,
+                epicCount: 0,
+                legendaryCount: 0,
+                limitedCount: 0
+            };
+            game.powerUps = data.power_ups || {
+                luckyCharm: 0,
+                doubleCurrency: 0,
+                rareBoost: 0
+            };
+            game.rarityChances = data.rarity_chances || {
+                common: 100,
+                uncommon: 60,
+                rare: 30,
+                epic: 9,
+                legendary: 1
+            };
+            
+            updateAllDisplays();
+            setSyncStatus('synced');
+            return true;
+        } else {
+            // New user - initialize with defaults and save
+            game.currency = 1000;
+            game.inventory = [];
+            game.inventoryLimit = 6;
+            game.level = 1;
+            game.experience = 0;
+            game.experienceToNext = 100;
+            game.collection = {
+                totalRolls: 0,
+                cardsSold: 0,
+                cardsCrafted: 0,
+                commonCount: 0,
+                uncommonCount: 0,
+                rareCount: 0,
+                epicCount: 0,
+                legendaryCount: 0,
+                limitedCount: 0
+            };
+            game.powerUps = {
+                luckyCharm: 0,
+                doubleCurrency: 0,
+                rareBoost: 0
+            };
+            game.rarityChances = {
+                common: 100,
+                uncommon: 60,
+                rare: 30,
+                epic: 9,
+                legendary: 1
+            };
+            
+            await saveGameData();
+            updateAllDisplays();
+            return false;
+        }
+    } catch (error) {
+        console.error('Load error:', error);
+        setSyncStatus('error');
+        return false;
+    }
+}        
         function setSyncStatus(status) {
             const statusElement = elements.syncStatus;
             statusElement.className = `sync-status ${status}`;
